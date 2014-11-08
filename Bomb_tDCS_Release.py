@@ -2,11 +2,12 @@
 Setup for tDCS bodyspec, including release RT's
 """
 # TO DO
-# check whether we want to add a sleep to "Ready?" just so it's always there
-# check how to do feedback/monitoring for early release
-# add s/t to track trials restarted b/o early release
-# see whether the key release tracker has enough resolution to measure 
-# near simultaneous key releases. if not, have it grab *everything* that is a keyup
+    # check whether we want to add a sleep to "Ready?" just so it's always there
+    # see whether theres a way to do faster tracking of early release
+    # add s/t to track trials restarted b/o early release
+    # add s/t that provides feedback if people release both keys during stim
+    # see whether the key release tracker has enough resolution to measure 
+    # near simultaneous key releases. if not, have it grab *everything* that is a keyup
 import pygame
 import pygame.locals as loc
 import random
@@ -15,47 +16,47 @@ import os
 import time
 import numpy
 
+##################
+# Classes & Defs #
+##################
 class Trial:
     n_trial = 0
 
     def __init__(self, word, left_label): 
         """ Set up the relevant variables for a given trial
         """
-        Trial.n_trial += 1
-        self.word = word
-        #self.resp = ''
-        self.n = self.n_trial
-        
+        Trial.n_trial += 1 # increment trial number
         self.background = SCREEN
-        # sets the text object for ready & warning cues
-        self.cue = MultiText(SCREEN,CENTER)
-        # sets the text object for stinm & resp labels
-        self.stim = MultiText(SCREEN, CENTER, resp_labels = True)
+
+        # set trial specific values
+        self.word = word
+        self.n = self.n_trial
         self.fix_dur = random.uniform(.75, 1.25)
 
-        # set response key variable
+        # sets the text object for ready & warning cues
+        self.cue = MultiText(SCREEN,CENTER)
+        # sets the text object for stim & resp labels
+        self.stim = MultiText(SCREEN, CENTER, resp_labels = True)
+        # set home and response key variables
         self.home_keys = [loc.K_d, loc.K_k]
         self.resp_keys = [loc.K_e, loc.K_i]
+        
 
     def run(self):
         """ Set up the different stages of stim presentation and resp logging
         for a given trial"""
-        # runs the separate stimuli 
+        
         # Show Ready cue
         self.cue.show('Ready?')
         pygame.display.update()
-        self.trial_onset = time.time()
+        self.trial_onset = time.time() # log Ready cue onset time
         # Wait for Ss to press the two home keys
-        #self.init = wait_for_init(self.home_keys)
         while 1:
             if monitor_key_down(self.home_keys):
+                self.home_button_press = time.time() # log home key presstime
                 break
             else:
                 continue
-
-            
-
-        self.home_button_press = time.time()
         # make sure ready stays on the screen for at least 300 ms
         time.sleep(.3)
         
@@ -87,33 +88,36 @@ class Trial:
         pygame.display.update()
         self.stim_onset = time.time()
 
-        # New response logging
+        # Start monitoring for responses
+        # set up lists for logging responses, monitoring for multiple resps
         self.release_resp = []
         self.release_time =[]
-        pygame.event.clear()
-        events = None
+        self.press_resp = []
+        self.press_time = []
+        pygame.event.clear() # clear the event queue to make sure we're starting fresh
+        events = None 
+        # start monitoring
         while 1:
-            events = pygame.event.get()
-            if not events:
-                continue
-            # ignores more than one event; NOTE might wanna change this
-            event = events[0]
+            events = pygame.event.get() # gets the last event and removes from queue
+            if not events: # if no keys have been released or pressed yet
+                continue # keep polling for key events
+            event = events[0] # pull out the relevant event
             # if this is a key release
             if event.type == loc.KEYUP:
-                # log the time
-                self.release_time.append(time.time())
-                self.release_resp.append(chr(event.key)) #
-                print 'release'
-                print self.release_resp
-                print self.release_time
-
+                self.release_time.append(time.time()) # log the time
+                self.release_resp.append(chr(event.key)) # log the response
             # if this is a key_press
             elif event.type == loc.KEYDOWN:
-                if event.key in self.resp_keys:
+                # if the key is a response key
+                if event.key in self.resp_keys: 
                     # log_stuff
-                    print 'press'
-                    self.press = 'press_placeholder'
+                    self.press_time.append(time.time()) # log the time
+                    self.press_resp.append(chr(event.key)) # log the response
                     break
+                # if the key is the home key
+                elif event.key in self.home_keys: # if they return to home key
+                    self.press_time.append(time.time()) # log the time
+                    self.press_resp.append(chr(event.key)) # log the response
                 # elif self.releases[-1] == whatever and event.key == blah:
                 #     print 'incompatible loop'
                     #do_stuff()
@@ -124,41 +128,8 @@ class Trial:
         pygame.display.flip()
         time.sleep(1)
 
-
-
-        # Get the response
-        # # make sure that one finger always stays on d or k
-        # self.release = wait_for_response(self.home_keys, resp_type=loc.KEYUP)
-        # self.release_time = time.time()
-        # self.press = wait_for_response(self.resp_keys)
-        # self.travel_time = time.time()
-
-        # # # Or...
-        # self.releases = []
-        # pygame.event.clear()
-        # while 1:
-        #     events = pygame.event.get()
-        #     event = events[0] # ignores more than one event
-        #     if event.type == RELEASE:
-        #         self.release_time.append(time.time())
-        #         self.releases.append(chr(event.key)) #name
-        #     elif event.type == PRESS:
-        #         if event.key in response_keys:
-        #             log_stuff
-        #             break
-        #         elif self.releases[-1] == whatever and event.key == blah:
-        #             do_stuff()
-
-
-
-
-        # # Clear screen and wait for ITI
-        # self.background.fill((0, 0, 0))
-        # pygame.display.flip()
-        # time.sleep(1)
-
     def write_data(self, save_file):
-        trial_info = [str(SUB_NUM), self.word, str(self.release_resp)] #, self.press,
+        trial_info = [str(SUB_NUM), self.word, ';'.join(self.release_resp)] #, self.press,
         #               str(self.n), 
         #               "{:.6f}".format(self.trial_onset),
         #               "{:.6f}".format(self.home_button_press),
@@ -187,10 +158,7 @@ class MultiText:
         self.label_pos_L = [(self.pos[0]/4)*3, (self.pos[1]/5)*7]
         self.label_pos_R = [(self.pos[0]/4)*5, (self.pos[1]/5)*7]
         
-    def show(self, text, color = [255,255,255]):
-         
-        #self.color = color
-
+    def show(self, text, color = [255,255,255]):        
         # set the stimulus text
         self.rend_text = self.font.render(text, True, color)
         self.text_rect = self.rend_text.get_rect()
@@ -215,22 +183,22 @@ def monitor_key_down(keylist):
     if numpy.all(keys_expected == keys_pressed):
         return True
 
-def wait_for_init(keylist, limit = 1000):
-    """ Waits for key(s) to be held to initialize trial
-    """
-    #time_start = time.time()
-    # define which keys are to be pressed
-    keys_expected = numpy.zeros(len(pygame.key.get_pressed()))
-    keys_expected[keylist] = 1
-    pygame.event.clear()
-    # start monitoring keypresses
-    while True:
-        pygame.event.clear()
-        keys_pressed = list(pygame.key.get_pressed())
-        # if all required keys are pressed
-        if numpy.all(keys_expected == keys_pressed):
-            return False
-            break
+# def wait_for_init(keylist, limit = 1000):
+#     """ Waits for key(s) to be held to initialize trial
+#     """
+#     #time_start = time.time()
+#     # define which keys are to be pressed
+#     keys_expected = numpy.zeros(len(pygame.key.get_pressed()))
+#     keys_expected[keylist] = 1
+#     pygame.event.clear()
+#     # start monitoring keypresses
+#     while True:
+#         pygame.event.clear()
+#         keys_pressed = list(pygame.key.get_pressed())
+#         # if all required keys are pressed
+#         if numpy.all(keys_expected == keys_pressed):
+#             return False
+#             break
 			
 def wait_for_response(keylist, limit=1000, resp_type=loc.KEYDOWN):
     """ Wait for a keypress, then go on.
@@ -284,74 +252,6 @@ def main():
     rel_rt,trav_rt'
     save_file.writelines(header + '\n')
 
-    # text stims
-    # f = open('../stims/filler_phrases.txt')
-    # filler = [line.strip() for line in f.readlines()]
-    # initial_filler = filler[-2:]
-    # filler_phrases = filler[:-2]
-    # f = open('../stims/target_phrases.txt')
-    # all_targets = [line.strip() for line in f.readlines()]
-    # all_targets = zip(*[e.split(',') for e in all_targets])
-    # all_right_targets = list(all_targets[0])
-    # all_left_targets = list(all_targets[1])
-    # n_targs = len(all_left_targets)
-
-    # Make a list of all targets to be used in the experiment.
-    # 2 lists: left-targets and right-targets
-    #   Different items assigned to left- & right-branching for diff EXP_VERSION
-    # EXP_VERSION balances which phrases are shown w/ right vs left structure.
-    # if EXP_VERSION == 0:
-    #     left_targets = all_left_targets[n_targs/2:]
-    #     right_targets = all_right_targets[:n_targs/2]
-    # elif EXP_VERSION == 1:
-    #     left_targets = all_left_targets[:n_targs/2]
-    #     right_targets = all_right_targets[n_targs/2:] 
-    # random.shuffle(left_targets)
-    # random.shuffle(right_targets)
-    # #stim_targets = left_targets + right_targets
-    # text_condition = (['left'] * (n_targs/2)) + (['right'] * (n_targs/2))
-
-    # Assemble dictionary of chirps in the different conditions.
-    # Randomize the order of chirps within conditions.
-    # Assign 1/2 the chirps in each condition to target, 1/2 to filler.
-    # chirp_names = {'left': {'same': [], 'diff': []},
-    #                'right': {'same': [], 'diff': []}}
-    # l_target_chirps = []
-    # r_target_chirps = []
-    # filler_chirps = []
-    # for branch in ['left', 'right']:
-    #     for pitch in ['same', 'diff']:
-    #         for n in range(n_targs/2): # w/ 48 targets, this goes to 24
-    #             chirp_name = 'branch_%s_%d_%s.wav' % (branch, n, pitch)
-    #             # Add to chirp_names list
-    #             chirp_names[branch][pitch].append(chirp_name)
-    #         # Put a random selection of 12 chirps from each
-    #         # branching-pitch category into lists to be bound
-    #         # with target and filler phrases. To make sure that
-    #         # the left- and right-branching phrases have the
-    #         # same number of chirps from each category, assign
-    #         # chirps separately to left- and right-branching phrases.
-    #         random.shuffle(chirp_names[branch][pitch])
-    #         chunk_size = n_targs / 4
-    #         cond_chirps = chirp_names[branch][pitch] 
-    #         l_target_chirps += cond_chirps[:chunk_size/2]
-    #         r_target_chirps += cond_chirps[chunk_size/2:chunk_size]
-    #         filler_chirps += cond_chirps[chunk_size:]
-
-    # # Put together the stim information into trials.
-    # target_phrases = left_targets + right_targets
-    # target_conditions = (['left'] * (n_targs/2)) + (['right'] * (n_targs/2))
-    # target_chirps = l_target_chirps + r_target_chirps
-    # targ_info = zip(target_phrases, target_conditions, target_chirps)
-
-    # fill_info = zip(filler_phrases, ['filler'] * n_targs, filler_chirps)
-    # stim_info = targ_info + fill_info
-    # random.shuffle(stim_info)
-
-    # # Start with 2 filler trials
-    # initial_stims = zip(initial_filler,
-    #                     ['filler', 'filler'],
-    #                     ['init_filler_l.wav', 'init_filler_r.wav'])
     stim_info = [['run', 'yes'], ['kick', 'no']]
 
     trials = [Trial(*s) for s in stim_info]
@@ -377,7 +277,8 @@ def main():
     pygame.display.update()
     wait_for_response(loc.K_ESCAPE)
 
-
-### Run study
+#################
+### Run study ###
+#################
 if __name__ == '__main__':
     main()
