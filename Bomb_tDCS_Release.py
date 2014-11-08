@@ -53,7 +53,7 @@ class Trial:
         # Wait for Ss to press the two home keys
         while 1:
             if monitor_key_down(self.home_keys):
-                self.home_button_press = time.time() # log home key presstime
+                self.home_key_press_time = time.time() # log home key presstime
                 break
             else:
                 continue
@@ -104,20 +104,21 @@ class Trial:
             event = events[0] # pull out the relevant event
             # if this is a key release
             if event.type == loc.KEYUP:
-                self.release_time.append(time.time()) # log the time
+                self.release_time.append(str("{:.6f}".format(time.time()))) # log the time
                 self.release_resp.append(chr(event.key)) # log the response
             # if this is a key_press
             elif event.type == loc.KEYDOWN:
+                    self.press_time.append(str("{:.6f}".format(time.time()))) # log the time
+                    self.press_resp.append(chr(event.key)) # log the response
                 # if the key is a response key
-                if event.key in self.resp_keys: 
+                    if event.key in self.resp_keys: 
+                        break
+                    elif event.key in self.home_keys:
+                        continue
                     # log_stuff
-                    self.press_time.append(time.time()) # log the time
-                    self.press_resp.append(chr(event.key)) # log the response
-                    break
+
+                    
                 # if the key is the home key
-                elif event.key in self.home_keys: # if they return to home key
-                    self.press_time.append(time.time()) # log the time
-                    self.press_resp.append(chr(event.key)) # log the response
                 # elif self.releases[-1] == whatever and event.key == blah:
                 #     print 'incompatible loop'
                     #do_stuff()
@@ -129,16 +130,14 @@ class Trial:
         time.sleep(1)
 
     def write_data(self, save_file):
-        trial_info = [str(SUB_NUM), self.word, ';'.join(self.release_resp)] #, self.press,
-        #               str(self.n), 
-        #               "{:.6f}".format(self.trial_onset),
-        #               "{:.6f}".format(self.home_button_press),
-        #               str(self.fix_dur),
-        #               "{:.6f}".format(self.stim_onset), 
-        #               "{:.6f}".format(self.release_time),
-        #               "{:.6f}".format(self.travel_time),
-        #               #str(self.release_time - self.stim_onset),
-        #               str(self.travel_time - self.release_time)]
+        trial_info = [str(SUB_NUM), self.word, str(self.n), str(self.fix_dur),
+                      ';'.join(self.release_resp),
+                      ';'.join(self.press_resp),
+                      "{:.6f}".format(self.trial_onset),
+                      "{:.6f}".format(self.home_key_press_time),
+                      "{:.6f}".format(self.stim_onset), 
+                      ';'.join(self.release_time),
+                      ';'.join(self.press_time)]
         line = ','.join(trial_info) + '\n'
         save_file.writelines([line])
         save_file.flush()
@@ -247,9 +246,9 @@ def main():
     else:
         save_file = open(fname, 'wb')
     # set up the header for the output file
-    header = 'subject,stim,release_resp,press_resp,trial_n,trial_onset,\
-    home_button_press,fix_dur,stim_onset,rel_time,trav_time,\
-    rel_rt,trav_rt'
+    header = 'subject, stim, trial_n, fix_dur, release_resp,\
+    press_resp, trial_onset, home_key_press_time, stim_onset, release_time, press_time'
+
     save_file.writelines(header + '\n')
 
     stim_info = [['run', 'yes'], ['kick', 'no']]
