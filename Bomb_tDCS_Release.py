@@ -3,35 +3,42 @@ Setup for tDCS bodyspec, including release RT's
 """
 # TO DO
     # check whether we want to add a sleep to "Ready?" just so it's always there
-    # see whether theres a way to do faster tracking of early release
+    # see whether theres a way to do faster tracking of early release during Ready and fixation
     # add s/t to track trials restarted b/o early release
-    # add s/t that provides feedback if people release both keys during stim
-    # see whether the key release tracker has enough resolution to measure 
-    # near simultaneous key releases. if not, have it grab *everything* that is a keyup
+    # where to add feedback? e.g. double key release during stim? 
+    # check whether we want to pseudorandomize!
+    # add practice trials
+    # add instructions
+##########
+# Import #
+##########
 import pygame
 import pygame.locals as loc
-import random
-import sys
-import os
-import time
-import numpy
+import random, numpy
+import os, csv, sys, time
 
 ##################
 # Classes & Defs #
 ##################
 class Trial:
-    n_trial = 0
+    n_trial = 0 # tracks trial number 
 
-    def __init__(self, word, left_label): 
+    def __init__(self, stiminfo): 
         """ Set up the relevant variables for a given trial
         """
         Trial.n_trial += 1 # increment trial number
+        self.trial_rep_n = 0 # tracks whether a given trial is restarted before stim 
         self.background = SCREEN
 
         # set trial specific values
-        self.word = word
+        self.word = stiminfo[0]
+        self.stim_type = stiminfo[1]
         self.n = self.n_trial
         self.fix_dur = random.uniform(.75, 1.25)
+        if LAB_VERSION == 'O':
+            self.labels = (stiminfo[2], stiminfo[3])
+        elif LAB_VERSION == 'F':
+            self.labels = (stiminfo[3], stiminfo[2])
 
         # sets the text object for ready & warning cues
         self.cue = MultiText(SCREEN,CENTER)
@@ -45,7 +52,7 @@ class Trial:
     def run(self):
         """ Set up the different stages of stim presentation and resp logging
         for a given trial"""
-        
+        self.trial_rep_n += 1 # increment trial presentation counter
         # Show Ready cue
         self.cue.show('Ready?')
         pygame.display.update()
@@ -84,7 +91,7 @@ class Trial:
             return None
 
         # Show stimulus
-        self.stim.show(self.word)
+        self.stim.show('to ' + self.word, self.labels)
         pygame.display.update()
         self.stim_onset = time.time()
 
@@ -115,14 +122,6 @@ class Trial:
                         break
                     elif event.key in self.home_keys:
                         continue
-                    # log_stuff
-
-                    
-                # if the key is the home key
-                # elif self.releases[-1] == whatever and event.key == blah:
-                #     print 'incompatible loop'
-                    #do_stuff()
-
 
         # Clear screen and wait for ITI
         self.background.fill((0, 0, 0))
@@ -137,7 +136,8 @@ class Trial:
                       "{:.6f}".format(self.home_key_press_time),
                       "{:.6f}".format(self.stim_onset), 
                       ';'.join(self.release_time),
-                      ';'.join(self.press_time)]
+                      ';'.join(self.press_time),
+                      str(self.trial_rep_n)]
         line = ','.join(trial_info) + '\n'
         save_file.writelines([line])
         save_file.flush()
@@ -153,11 +153,10 @@ class MultiText:
         # provide the x & y coordinates for blitting location
         self.pos = pos
         # set up the labels and their positions
-        self.label = ('yes', 'no')
         self.label_pos_L = [(self.pos[0]/4)*3, (self.pos[1]/5)*7]
         self.label_pos_R = [(self.pos[0]/4)*5, (self.pos[1]/5)*7]
         
-    def show(self, text, color = [255,255,255]):        
+    def show(self, text, labels = None, color = [255,255,255]):        
         # set the stimulus text
         self.rend_text = self.font.render(text, True, color)
         self.text_rect = self.rend_text.get_rect()
@@ -167,8 +166,8 @@ class MultiText:
         
         # add response labels
         if self.resp_labels:
-        	self.rend_label_L = self.font.render(self.label[0], True, color)
-	        self.rend_label_R = self.font.render(self.label[1], True, color)
+        	self.rend_label_L = self.font.render(labels[0], True, color)
+	        self.rend_label_R = self.font.render(labels[1], True, color)
 	        self.screen.blit(self.rend_label_L, self.label_pos_L)
 	        self.screen.blit(self.rend_label_R, self.label_pos_R)
 	        
@@ -181,23 +180,6 @@ def monitor_key_down(keylist):
     # if all required keys are pressed
     if numpy.all(keys_expected == keys_pressed):
         return True
-
-# def wait_for_init(keylist, limit = 1000):
-#     """ Waits for key(s) to be held to initialize trial
-#     """
-#     #time_start = time.time()
-#     # define which keys are to be pressed
-#     keys_expected = numpy.zeros(len(pygame.key.get_pressed()))
-#     keys_expected[keylist] = 1
-#     pygame.event.clear()
-#     # start monitoring keypresses
-#     while True:
-#         pygame.event.clear()
-#         keys_pressed = list(pygame.key.get_pressed())
-#         # if all required keys are pressed
-#         if numpy.all(keys_expected == keys_pressed):
-#             return False
-#             break
 			
 def wait_for_response(keylist, limit=1000, resp_type=loc.KEYDOWN):
     """ Wait for a keypress, then go on.
@@ -213,9 +195,6 @@ def wait_for_response(keylist, limit=1000, resp_type=loc.KEYDOWN):
         elif not event:
             continue
         elif event[0].key in keylist:
-            print chr(event[0].key)
-            #print event[1]
-            print event
             return chr(event[0].key)
 
 def main():
@@ -245,15 +224,22 @@ def main():
        raise(Exception('File %s already exists.' % fname))
     else:
         save_file = open(fname, 'wb')
+    
     # set up the header for the output file
     header = 'subject, stim, trial_n, fix_dur, release_resp,\
-    press_resp, trial_onset, home_key_press_time, stim_onset, release_time, press_time'
+    press_resp, trial_onset, home_key_press_time, stim_onset,\
+    release_time, press_time,trial_rep_counter'
 
     save_file.writelines(header + '\n')
 
-    stim_info = [['run', 'yes'], ['kick', 'no']]
+    # get the stims in
+    stimfile = 'Bomb_tDCS_stims.csv'
+    reader = csv.reader(open(stimfile,'rU'), dialect = 'excel')
+    headerline = reader.next()
+    verb_list = [row for row in reader]
+    random.shuffle(verb_list)    
 
-    trials = [Trial(*s) for s in stim_info]
+    trials = [Trial(stim_info) for stim_info in verb_list]
 
     ##############################
     ##### Run the experiment #####
@@ -267,7 +253,7 @@ def main():
     pygame.display.flip()
 
     # Run the trials
-    for t in trials:
+    for t in trials[:10]:
         t.run()
         t.write_data(save_file)
 
